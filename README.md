@@ -1,62 +1,83 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Trevco Importer
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A Laravel application for **orchestrating integration flows**: import and sync data between your systems and external vendors (for example NetSuite, marketplaces, and internal APIs). Flows are defined **on disk** under `integrations/`, executed **asynchronously** on queues, and monitored through a **Filament** admin panel.
 
-## About Laravel
+**Repository:** [github.com/dlespinosa365/trevco-importer](https://github.com/dlespinosa365/trevco-importer)
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## What it does
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- **Disk-based integrations** — Each integration is a folder with `config.php`, optional group configs, and **flows** made of PHP **steps** (`Step` interface) that pass context forward.
+- **Connectors** — Credentials and typed vendor clients live in the database (encrypted), managed in Filament; steps resolve them via `ConnectorsHelper`.
+- **Execution model** — A run creates `FlowExecution` / `StepExecution` rows. `ExecuteIntegrationFlowJob` starts a chain; `ExecuteIntegrationStepJob` runs one step and dispatches the next (or completes / fails).
+- **Fan-out** — A step can spawn one child execution per item so downstream work stays isolated and parallelizable.
+- **Scheduling & triggers** — Flow schedules, manual runs, CLI (`flows:run`), and webhooks-style entry points (first step override).
+- **Failure handling** — Configurable mail / Slack / Teams-style notifications; stale `RUNNING` runs can be reconciled via an Artisan command.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Tech stack
 
-## Learning Laravel
+| Area | Choice |
+|------|--------|
+| Framework | Laravel 13, PHP 8.3+ |
+| Admin UI | Filament v5 |
+| Queues (production) | Redis + **Laravel Horizon** |
+| Permissions | Spatie Laravel Permission |
+| Tests | Pest 4 |
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Quick start (local)
 
 ```bash
-composer require laravel/boost --dev
+git clone https://github.com/dlespinosa365/trevco-importer.git
+cd trevco-importer
 
-php artisan boost:install
+composer install
+cp .env.example .env
+php artisan key:generate
+
+php artisan migrate --seed   # admin user + roles (see seeders / Filament docs)
+
+npm install && npm run build   # or npm run dev during frontend work
+
+php artisan serve
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Open the app URL (for [Laravel Herd](https://herd.laravel.com), typically `https://{project-folder}.test`, or `http://localhost:8000` with `php artisan serve`). Log in with the seeded Filament admin credentials from `.env` / `FilamentAdminUserSeeder` (override in production).
 
-## Integration flows (this project)
+For **queue-driven flows** without Horizon on Windows, you can use `QUEUE_CONNECTION=database` or `sync` for light testing; **Horizon** targets Linux/WSL/Docker (`ext-pcntl`, `ext-posix`).
 
-Disk-based integrations, queues, connectors, and how to add new flows are documented for developers in **[docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)**. **Laravel Horizon** is configured for Redis workers (integration `flows` queue + general queues); see the Horizon section in the guide. For queue/Horizon robustness and known risks, see **[docs/ARCHITECTURE_REVIEW.md](docs/ARCHITECTURE_REVIEW.md)**.
+## Useful Artisan commands
 
-## Contributing
+| Command | Purpose |
+|---------|---------|
+| `php artisan flows:validate` | Validate every discovered `flow_ref` and step wiring |
+| `php artisan flows:run {flow_ref}` | Run a flow (async by default; `--sync` for debugging) |
+| `php artisan flows:schedule-runner` | Dispatch due schedules (normally run by the scheduler) |
+| `php artisan flows:reconcile-stale-running` | Mark orphaned `RUNNING` executions failed |
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+See **`php artisan list`** and **`docs/DEVELOPER_GUIDE.md`** for the full command reference.
 
-## Code of Conduct
+## Documentation
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+| Document | Contents |
+|----------|----------|
+| **[docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)** | Directory layout, `flow_ref`, steps, connectors, fan-out, queues, Horizon, idempotency, heartbeats, business-rule errors |
+| **[docs/ARCHITECTURE_REVIEW.md](docs/ARCHITECTURE_REVIEW.md)** | Queue semantics, `retry_after`, staleness, operational tuning |
+| **[AGENTS.md](AGENTS.md)** | AI / editor conventions for this repo (Laravel Boost, testing, Pint) |
 
-## Security Vulnerabilities
+## Testing
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```bash
+php artisan test --compact
+```
+
+Run a subset: `php artisan test --compact tests/Feature/IntegrationDiskFlowTest.php`
+
+## Production checklist
+
+- `APP_ENV=production`, secure `APP_KEY`, real `APP_URL`
+- `QUEUE_CONNECTION=redis`, Redis available, **`php artisan horizon`** under Supervisor/systemd
+- Cron or platform scheduler running **`php artisan schedule:run`** (flows schedule + reconcile + Horizon snapshot)
+- Tune `FLOW_LONGEST_STEP_SECONDS`, Horizon supervisors, and notification channels as needed
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+This project is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT). Laravel and bundled packages retain their respective licenses.

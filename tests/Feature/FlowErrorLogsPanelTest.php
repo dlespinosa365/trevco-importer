@@ -94,6 +94,44 @@ it('shows the full error text on the details tab', function () {
         ->assertSee($longError);
 });
 
+it('deletes all error log rows for the flow', function () {
+    $flowRef = 'demo/group/flow-delete-all';
+
+    $execution = FlowExecution::query()->create([
+        'flow_ref' => $flowRef,
+        'integration_key' => 'demo',
+        'status' => FlowExecution::STATUS_FAILED,
+        'triggered_by_user_id' => null,
+        'triggered_by_type' => 'manual',
+        'context' => [],
+        'trigger_payload' => [],
+        'error_message' => null,
+        'started_at' => now(),
+        'finished_at' => now(),
+    ]);
+
+    $step = StepExecution::query()->create([
+        'flow_execution_id' => $execution->id,
+        'flow_step_id' => null,
+        'step_class' => 'SomeStep',
+        'step_index' => 0,
+        'step_type' => StepExecution::STEP_TYPE_INTEGRATION_DISK,
+        'input' => [],
+        'output' => null,
+        'logs' => null,
+        'status' => StepExecution::STATUS_FAILED,
+        'error_message' => 'err',
+        'duration_ms' => 1,
+        'started_at' => now(),
+        'finished_at' => now(),
+    ]);
+
+    Livewire::test(FlowErrorLogsPanel::class, ['flowRef' => $flowRef])
+        ->call('deleteAllErrorLogs');
+
+    expect(StepExecution::query()->whereKey($step->id)->exists())->toBeFalse();
+});
+
 it('deletes a step error row', function () {
     $flowRef = 'demo/group/flow2';
 

@@ -64,6 +64,9 @@ final class NetSuiteConnector implements TestsConnection
     }
 
     /**
+     * Creates a transaction via the RESTlet using standard record mode (`isDynamic: false` on the SuiteScript side).
+     * Any `isDynamic` key in `bodyParams` is removed and cannot override that behavior.
+     *
      * @param  array<string, mixed>  $order
      * @return array<string, mixed>
      */
@@ -75,7 +78,7 @@ final class NetSuiteConnector implements TestsConnection
         }
 
         if (! array_key_exists('bodyParams', $order)) {
-            unset($bodyParams['item'], $bodyParams['lineParams'], $bodyParams['isDynamic'], $bodyParams['type']);
+            unset($bodyParams['item'], $bodyParams['lineParams'], $bodyParams['type']);
         }
 
         $lineParams = $order['lineParams'] ?? ($order['item']['items'] ?? []);
@@ -83,12 +86,13 @@ final class NetSuiteConnector implements TestsConnection
             throw new InvalidArgumentException('createOrder expects lineParams as an array.');
         }
 
+        unset($bodyParams['isDynamic']);
+
         return $this->requestRestletJson('POST', [
             'action' => 'createTransaction',
             'type' => (string) ($order['type'] ?? 'salesorder'),
             'bodyParams' => $bodyParams,
             'lineParams' => $lineParams,
-            'isDynamic' => (bool) ($order['isDynamic'] ?? true),
         ]);
     }
 

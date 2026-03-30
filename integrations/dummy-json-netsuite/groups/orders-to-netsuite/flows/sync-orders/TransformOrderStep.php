@@ -9,9 +9,9 @@ use RuntimeException;
 
 final class TransformOrderStep implements Step
 {
-    public const NETSUITE_DEFAULT_CUSTOMER_INTERNAL_ID = '9';
+    public const NETSUITE_DEFAULT_CUSTOMER_INTERNAL_ID = '95311';
 
-    public const NETSUITE_DEFAULT_ITEM_INTERNAL_ID = '75';
+    public const NETSUITE_DEFAULT_ITEM_INTERNAL_ID = '13527919';
 
     public function run(DiskFlowContext $context): StepResult
     {
@@ -37,7 +37,7 @@ final class TransformOrderStep implements Step
 
             $quantity = max(1, (int) ($product['quantity'] ?? 1));
             $lineItems[] = [
-                'item' => ['id' => $defaultItemId],
+                'item' => $defaultItemId,
                 'quantity' => $quantity,
                 'rate' => (float) ($product['price'] ?? 0),
                 'description' => (string) ($product['title'] ?? 'Dummy JSON item'),
@@ -46,7 +46,7 @@ final class TransformOrderStep implements Step
 
         if ($lineItems === []) {
             $lineItems[] = [
-                'item' => ['id' => $defaultItemId],
+                'item' => $defaultItemId,
                 'quantity' => 1,
                 'rate' => (float) ($order['total'] ?? 0),
                 'description' => 'Fallback line from cart total',
@@ -54,9 +54,11 @@ final class TransformOrderStep implements Step
         }
 
         $payload = [
-            'entity' => ['id' => $defaultCustomerId],
+            // N/record setValue expects internal IDs for references, not { id: "..." } (REST API shape).
+            'entity' => $defaultCustomerId,
             'externalId' => 'dummy-json-cart-'.($order['id'] ?? 'unknown'),
             'memo' => 'Imported from Dummy JSON cart '.($order['id'] ?? 'unknown'),
+            'otherrefnum' => 'dummy-json-cart-'.($order['id'] ?? 'unknown'),
             'item' => [
                 'items' => $lineItems,
             ],

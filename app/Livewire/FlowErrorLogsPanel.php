@@ -8,6 +8,7 @@ use App\Support\HumanReadablePayloadSections;
 use Filament\Actions\Action;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
+use Filament\Notifications\Notification;
 use Filament\Schemas\Concerns\InteractsWithSchemas;
 use Filament\Schemas\Contracts\HasSchemas;
 use Filament\Tables\Columns\TextColumn;
@@ -102,10 +103,47 @@ final class FlowErrorLogsPanel extends Component implements HasActions, HasSchem
         $this->flushCachedTableRecords();
     }
 
+    /**
+     * Remove every error log row currently listed for this flow (same effect as deleting each row).
+     */
+    public function deleteAllErrorLogs(): void
+    {
+        $rows = $this->errorRows();
+        if ($rows->isEmpty()) {
+            return;
+        }
+
+        foreach ($rows as $row) {
+            $this->deleteRow($row['key']);
+        }
+
+        $this->selectedRowKey = '';
+        $this->activeStepKey = '';
+        $this->flushCachedTableRecords();
+
+        Notification::make()
+            ->title(__('All error logs removed'))
+            ->success()
+            ->send();
+    }
+
     public function table(Table $table): Table
     {
         return $table
             ->records(fn (): array => $this->errorRowsForTable())
+            ->toolbarActions([
+                Action::make('deleteAllErrorLogs')
+                    ->label(__('Delete all error logs'))
+                    ->icon('heroicon-o-trash')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->modalHeading(__('Delete all error logs?'))
+                    ->modalDescription(__('This removes every error listed for this flow. Failed step rows are deleted; run-level-only entries delete the whole execution (including child runs).'))
+                    ->action(function (): void {
+                        $this->deleteAllErrorLogs();
+                    })
+                    ->visible(fn (): bool => count($this->errorRowsForTable()) > 0),
+            ])
             ->columns([
                 TextColumn::make('run_label')
                     ->label(__('Run'))
